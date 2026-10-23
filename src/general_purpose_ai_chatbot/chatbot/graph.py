@@ -6,7 +6,7 @@ from general_purpose_ai_chatbot.chatbot.tools.summariser import summarise_text
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
 SYSTEM_PROMPT = (
     "You are a helpful general-purpose assistant. "
@@ -38,3 +38,21 @@ def stream_reply(graph, user_text: str, thread_id: str):
         {"messages": [HumanMessage(content=user_text)]}, config=config, stream_mode="messages"):
         if metadata.get("langgraph_node") == "llm" and chunk.content:
             yield chunk.content
+
+def get_chat_history(graph, thread_id: str) -> list[dict]:
+    """Return the messages a user should see in this thread, with the tools used for each answer."""
+    state = graph.get_state({"configurable": {"thread_id": thread_id}})
+    history = []
+    tools_used = []
+    for message in state.values.get("messages", []):
+        if isinstance(message, HumanMessage):
+            history.append({"role": "user", "text": message.content, "tools": []})
+            tools_used = []
+        elif isinstance(message, AIMessage):
+            for call in message.tool_calls:
+                if call["name"] not in tools_used:
+                    tools_used.append(call["name"])
+            if message.content:
+                history.append({"role": "assistant", "text": message.content, "tools": tools_used})
+                tools_used = []
+    return history
