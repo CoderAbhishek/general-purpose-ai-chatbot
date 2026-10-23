@@ -2,6 +2,9 @@ import os
 
 import pytest
 
+from langchain_core.messages import HumanMessage, ToolMessage
+
+from general_purpose_ai_chatbot.chatbot.graph import build_graph
 from general_purpose_ai_chatbot.chatbot.model import create_chat_model
 from general_purpose_ai_chatbot.chatbot.tools.calculator import calculator
 from general_purpose_ai_chatbot.chatbot.tools.summariser import summarise_text
@@ -65,3 +68,14 @@ def test_groq_selects_web_search_for_current_events():
     call = response.tool_calls[0]
     assert call["name"] == "tavily_search"
     assert call["args"]["query"].strip()
+
+
+def test_graph_end_to_end_with_calculator():
+    # Full loop with real Groq and the real calculator: question -> llm -> tools -> llm -> answer.
+    result = build_graph().invoke({"messages": [HumanMessage("What is 1234 multiplied by 5678?")]})
+    messages = result["messages"]
+
+    assert any(isinstance(m, ToolMessage) for m in messages), "no tool was called"
+    final = messages[-1]
+    assert not final.tool_calls
+    assert "7006652" in final.content.replace(",", "")
