@@ -4,7 +4,9 @@ import pytest
 
 from langchain_core.messages import HumanMessage, ToolMessage
 
-from general_purpose_ai_chatbot.chatbot.graph import build_graph
+from langgraph.checkpoint.memory import InMemorySaver
+
+from general_purpose_ai_chatbot.chatbot.graph import build_graph, stream_reply
 from general_purpose_ai_chatbot.chatbot.model import create_chat_model
 from general_purpose_ai_chatbot.chatbot.tools.calculator import calculator
 from general_purpose_ai_chatbot.chatbot.tools.summariser import summarise_text
@@ -79,3 +81,24 @@ def test_graph_end_to_end_with_calculator():
     final = messages[-1]
     assert not final.tool_calls
     assert "7006652" in final.content.replace(",", "")
+
+
+def test_live_streaming_yields_multiple_pieces():
+    # Real Groq through the real graph: the reply arrives in several pieces, not one block.
+    graph = build_graph(checkpointer=InMemorySaver())
+    pieces = list(stream_reply(graph, "Explain in two sentences what a chatbot is.", "live-stream"))
+
+    assert len(pieces) > 1
+    assert "".join(pieces).strip()
+
+
+def test_live_memory_and_thread_isolation():
+    # Real Groq: the same thread remembers a fact; a new thread does not.
+    graph = build_graph(checkpointer=InMemorySaver())
+    list(stream_reply(graph, "My name is Abhishek. Please remember it.", "live-thread-1"))
+
+    same_thread = "".join(stream_reply(graph, "What is my name?", "live-thread-1"))
+    new_thread = "".join(stream_reply(graph, "What is my name?", "live-thread-2"))
+
+    assert "abhishek" in same_thread.lower()
+    assert "abhishek" not in new_thread.lower()
