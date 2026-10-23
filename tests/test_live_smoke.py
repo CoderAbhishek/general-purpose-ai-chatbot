@@ -2,6 +2,8 @@ import os
 
 import pytest
 
+from general_purpose_ai_chatbot.chatbot.model import create_chat_model
+from general_purpose_ai_chatbot.chatbot.tools.calculator import calculator
 from general_purpose_ai_chatbot.chatbot.tools.summariser import summarise_text
 
 # Live tests are excluded by default (see addopts in pyproject.toml). Run with: uv run pytest -m live
@@ -27,3 +29,15 @@ def test_summariser_live_groq_call():
     assert result.strip()
     assert not result.startswith("Error:")
     assert len(result) < len(LONG_TEXT)
+
+
+def test_groq_selects_calculator_for_arithmetic():
+    # Real model + real tool schema: proves Groq accepts the schema and chooses the tool.
+    model = create_chat_model().bind_tools([calculator])
+    response = model.invoke("What is 1234 multiplied by 5678?")
+
+    assert response.tool_calls, "model answered directly instead of calling a tool"
+    call = response.tool_calls[0]
+    assert call["name"] == "calculator"
+    assert call["args"]["operation"] == "multiply"
+    assert {float(call["args"]["a"]), float(call["args"]["b"])} == {1234.0, 5678.0}
